@@ -96,6 +96,8 @@ let ledgerState = {
   summaryRange: 'daily' // daily, weekly, monthly
 };
 
+let ledgerDisplayLimit = 30; // Max transactions visible initially in Daily Ledger (Pagination limit)
+
 // Seed initial channels & entries
 function seedInitialBettingData() {
   // 13 default channels
@@ -337,7 +339,7 @@ function renderDailyChart() {
   });
 }
 
-// C. Render Daily Ledger Table
+// C. Render Daily Ledger Table (Optimized with DocumentFragment and Pagination)
 function renderLedgerTable() {
   const tbody = document.getElementById('ledger-table-rows');
   tbody.innerHTML = '';
@@ -363,15 +365,26 @@ function renderLedgerTable() {
   // Sort by date desc
   filtered.sort((a,b) => new Date(b.date) - new Date(a.date));
 
-  if (filtered.length === 0) {
+  const totalFiltered = filtered.length;
+  const loadMoreContainer = document.getElementById('ledger-load-more-container');
+
+  if (totalFiltered === 0) {
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--muted); padding:32px;">ไม่พบรายการบัญชีมวยที่ระบุ</td></tr>`;
     if (mobileContainer) {
       mobileContainer.innerHTML = `<p style="text-align:center; color:var(--muted); padding:24px;">ไม่พบรายการบัญชีมวยที่ระบุ</p>`;
     }
+    if (loadMoreContainer) loadMoreContainer.style.display = 'none';
     return;
   }
 
-  filtered.forEach(t => {
+  // Slicing based on display limit
+  const itemsToRender = filtered.slice(0, ledgerDisplayLimit);
+
+  // Use DocumentFragments to optimize DOM appends (prevents layout thrashing/reflow lag)
+  const tbodyFragment = document.createDocumentFragment();
+  const mobileFragment = document.createDocumentFragment();
+
+  itemsToRender.forEach(t => {
     const channel = ledgerState.channels.find(c => c.id === t.channelId);
     const channelName = channel ? channel.name : `ช่องทางมวย ${t.channelId}`;
 
@@ -398,7 +411,7 @@ function renderLedgerTable() {
         <button class="btn-delete-row btn-delete-bet" data-id="${t.id}" title="ลบรายการ">🗑️</button>
       </td>
     `;
-    tbody.appendChild(tr);
+    tbodyFragment.appendChild(tr);
 
     // 2. Mobile Card
     if (mobileContainer) {
@@ -446,9 +459,26 @@ function renderLedgerTable() {
           ${mobileStatusBadge}
         </div>
       `;
-      mobileContainer.appendChild(cardEl);
+      mobileFragment.appendChild(cardEl);
     }
   });
+
+  // Batch insert into DOM
+  tbody.appendChild(tbodyFragment);
+  if (mobileContainer) {
+    mobileContainer.appendChild(mobileFragment);
+  }
+
+  // Handle pagination button display
+  if (loadMoreContainer) {
+    if (totalFiltered > ledgerDisplayLimit) {
+      loadMoreContainer.style.display = 'block';
+      const remainingCount = totalFiltered - ledgerDisplayLimit;
+      document.getElementById('btn-ledger-load-more').innerText = `➕ ดูรายการเพิ่มอีก 30 รายการ (เหลืออีก ${remainingCount})`;
+    } else {
+      loadMoreContainer.style.display = 'none';
+    }
+  }
 
   // Inline Status Click Toggle (Supports both Desktop labels and Mobile tactile buttons)
   document.querySelectorAll('.table-checkbox-label, .mobile-status-btn').forEach(label => {
@@ -484,6 +514,8 @@ function renderLedgerTable() {
 function renderChannels() {
   const container = document.getElementById('channels-cards-container');
   container.innerHTML = '';
+
+  const fragment = document.createDocumentFragment();
 
   ledgerState.channels.forEach(ch => {
     // Calculate stats for this specific channel
@@ -539,8 +571,10 @@ function renderChannels() {
         </select>
       </div>
     `;
-    container.appendChild(card);
+    fragment.appendChild(card);
   });
+
+  container.appendChild(fragment);
 
   // Attach inline name editor listener
   document.querySelectorAll('.channel-card-name').forEach(el => {
@@ -674,6 +708,8 @@ function renderPeriodSummaries() {
     return;
   }
 
+  const fragment = document.createDocumentFragment();
+
   sortedKeys.forEach(key => {
     const g = groups[key];
     const card = document.createElement('div');
@@ -712,8 +748,10 @@ function renderPeriodSummaries() {
         <span class="${netClass}">${netText} THB</span>
       </div>
     `;
-    container.appendChild(card);
+    fragment.appendChild(card);
   });
+
+  container.appendChild(fragment);
 }
 
 // Function to sync sound buttons state (Desktop & Mobile)
@@ -779,6 +817,9 @@ window.addEventListener('load', () => {
       const tabName = item.dataset.tab;
       document.querySelectorAll('.panel-section').forEach(p => p.classList.remove('active'));
       document.getElementById(`tab-${tabName}`).classList.add('active');
+
+      // Reset ledger display limit when switching tabs
+      ledgerDisplayLimit = 30;
 
       // Update Page titles
       const tabTitles = {
@@ -904,10 +945,24 @@ window.addEventListener('load', () => {
     });
   });
 
-  // Bookkeeping Ledger filter binds
-  document.getElementById('filter-ledger-channel').addEventListener('change', renderLedgerTable);
-  document.getElementById('filter-ledger-status').addEventListener('change', renderLedgerTable);
-  document.getElementById('filter-ledger-date').addEventListener('change', renderLedgerTable);
+  // Bookkeeping Ledger filter binds (Resets display limit on filter change)
+  const handleFilterChange = () => {
+    ledgerDisplayLimit = 30;
+    renderLedgerTable();
+  };
+  document.getElementById('filter-ledger-channel').addEventListener('change', handleFilterChange);
+  document.getElementById('filter-ledger-status').addEventListener('change', handleFilterChange);
+  document.getElementById('filter-ledger-date').addEventListener('change', handleFilterChange);
+
+  // Load More pagination button click
+  const loadMoreBtn = document.getElementById('btn-ledger-load-more');
+  if (loadMoreBtn) {
+    loadMoreBtn.addEventListener('click', () => {
+      sounds.playClick();
+      ledgerDisplayLimit += 30;
+      renderLedgerTable();
+    });
+  }
 
   // Reset channel names back to default
   document.getElementById('btn-reset-channels-names').addEventListener('click', () => {
