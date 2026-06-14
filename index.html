@@ -239,11 +239,13 @@
         <!-- TAB 3: 13 CHANNELS -->
         <div class="panel-section" id="tab-channels">
           <div class="card-panel">
-            <div class="card-panel-title">
+            <div class="card-panel-title" style="flex-direction: column; align-items: flex-start; gap: 10px;">
               <span>🥊 ข้อมูลสรุปรายช่องทางมวย (13 Financial Channels)</span>
-              <div style="display:flex; gap:8px;">
-                <button class="btn-submit" id="btn-reset-channels-names" style="padding: 4px 10px; font-size:0.75rem; background-color: #f1f5f9; color: var(--primary-light); border: 1px solid var(--border-color);">✏️ รีเซ็ตชื่อเริ่มต้น</button>
-                <button class="btn-submit" id="btn-clear-all-data" style="padding: 4px 10px; font-size:0.75rem; background-color: var(--loss-color); color: #fff; box-shadow: none;">🗑️ ล้างข้อมูลทั้งหมด</button>
+              <div style="display:flex; gap:8px; flex-wrap: wrap; width: 100%;">
+                <button class="btn-submit" id="btn-backup-data" style="padding: 6px 12px; font-size:0.75rem; background-color: var(--accent-light); color: var(--accent); border: 1px solid rgba(37, 99, 235, 0.2); box-shadow: none;">📤 สำรองข้อมูล (Backup)</button>
+                <button class="btn-submit" id="btn-import-data" style="padding: 6px 12px; font-size:0.75rem; background-color: #ecfdf5; color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2); box-shadow: none;">📥 นำเข้าข้อมูล (Import)</button>
+                <button class="btn-submit" id="btn-reset-channels-names" style="padding: 6px 12px; font-size:0.75rem; background-color: #f1f5f9; color: var(--primary-light); border: 1px solid var(--border-color); box-shadow: none;">✏️ รีเซ็ตชื่อเริ่มต้น</button>
+                <button class="btn-submit" id="btn-clear-all-data" style="padding: 6px 12px; font-size:0.75rem; background-color: var(--loss-color); color: #fff; box-shadow: none;">🗑️ ล้างข้อมูลทั้งหมด</button>
               </div>
             </div>
             

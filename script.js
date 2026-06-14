@@ -1057,6 +1057,70 @@ window.addEventListener('load', () => {
     }
   });
 
+  // Backup Data Click
+  document.getElementById('btn-backup-data').addEventListener('click', () => {
+    sounds.playClick();
+    const backupStr = JSON.stringify(ledgerState);
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(backupStr).then(() => {
+      alert("📤 คัดลอกข้อมูลบัญชีมวยลงคลิปบอร์ดแล้ว!\n\nกรุณาเปิดลิงก์เว็บใหม่บน iPhone แล้วกดปุ่ม 'นำเข้าข้อมูล (Import)' จากนั้นทำการกดวางรหัสที่คัดลอกมานี้ได้เลยครับ");
+    }).catch(() => {
+      // Fallback if clipboard API blocked
+      prompt("เครื่องไม่รองรับการคัดลอกอัตโนมัติ กรุณาคัดลอกรหัสสำรองข้อมูลทั้งหมดด้านล่างนี้:", backupStr);
+    });
+  });
+
+  // Import Data Click
+  document.getElementById('btn-import-data').addEventListener('click', () => {
+    sounds.playClick();
+    const backupStr = prompt("📥 นำเข้าข้อมูลบัญชีมวย:\n\nกรุณาวางรหัสสำรองข้อมูลที่คุณคัดลอกมาจากระบบเดิมลงในช่องด้านล่าง:");
+    if (backupStr === null) return; // User cancelled
+    
+    const cleanStr = backupStr.trim();
+    if (!cleanStr) {
+      alert("ไม่พบรหัสข้อมูลการนำเข้า!");
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(cleanStr);
+      if (parsed && Array.isArray(parsed.channels) && Array.isArray(parsed.transactions)) {
+        if (confirm("⚠️ ยืนยันการนำเข้าข้อมูล? ข้อมูลที่มีอยู่เดิมในเว็บหน้านี้จะถูกแทนที่ด้วยข้อมูลนำเข้าใหม่ทั้งหมด!")) {
+          sounds.playSaveChime();
+          
+          ledgerState.channels = parsed.channels;
+          ledgerState.transactions = parsed.transactions.map(t => {
+            // Apply backward compatibility parsing if needed
+            if (t.commType === undefined) {
+              t.commType = 'pct';
+              t.commVal = t.commPct !== undefined ? t.commPct : 5;
+            }
+            return t;
+          });
+          if (parsed.activeTab) ledgerState.activeTab = parsed.activeTab;
+          if (parsed.summaryRange) ledgerState.summaryRange = parsed.summaryRange;
+
+          saveToStorage();
+
+          // Refresh UI
+          renderDashboard();
+          renderLedgerTable();
+          renderChannels();
+          renderPeriodSummaries();
+          updateChannelDropdown();
+
+          alert("📥 นำเข้าข้อมูลบัญชีมวยทั้งหมดสำเร็จเรียบร้อยแล้ว!");
+        }
+      } else {
+        alert("รูปแบบรหัสข้อมูลไม่ถูกต้อง ไม่สามารถนำเข้าได้!");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("รหัสข้อมูลไม่ถูกต้องกรุณาตรวจสอบและลองใหม่อีกครั้ง!");
+    }
+  });
+
   // PWA Service Worker Registration
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js')
