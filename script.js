@@ -216,6 +216,8 @@ function calculateBetFinancials() {
   let totalComm = 0;      // Total commission deducted
   let totalSettled = 0;   // Net amount already transferred (IsTransferred = true)
   let totalPending = 0;   // Net amount not yet transferred (IsTransferred = false)
+  let countSettled = 0;   // Number of settled entries
+  let countPending = 0;   // Number of pending entries
 
   ledgerState.transactions.forEach(t => {
     const commission = t.gross > 0 ? t.gross * (t.commPct / 100) : 0;
@@ -224,8 +226,10 @@ function calculateBetFinancials() {
 
     if (t.isTransferred) {
       totalSettled += t.net;
+      countSettled++;
     } else {
       totalPending += t.net;
+      countPending++;
     }
   });
 
@@ -233,7 +237,9 @@ function calculateBetFinancials() {
     totalNet,
     totalComm,
     totalSettled,
-    totalPending
+    totalPending,
+    countSettled,
+    countPending
   };
 }
 
@@ -276,6 +282,12 @@ function renderDashboard() {
   } else {
     pendingEl.style.color = 'var(--primary)';
   }
+
+  // Update dynamic description texts with item counts
+  const totalCount = ledgerState.transactions.length;
+  document.getElementById('balance-desc').innerText = `สุทธิจากรายการเล่นทั้งหมด ${totalCount} รายการ`;
+  document.getElementById('settled-desc').innerText = `โอนเคลียร์เรียบร้อยแล้ว ${stats.countSettled} รายการ`;
+  document.getElementById('pending-desc').innerText = `ค้างโอนสะสมอยู่ ${stats.countPending} รายการ`;
 
   // Render recent 8 active days column bars
   renderDailyChart();
