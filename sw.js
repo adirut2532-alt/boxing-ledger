@@ -1,4 +1,4 @@
-const CACHE_NAME = 'boxing-ledger-cache-v2';
+const CACHE_NAME = 'boxing-ledger-cache-v4';
 const ASSETS = [
   'index.html',
   'style.css',

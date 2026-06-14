@@ -897,6 +897,11 @@ window.addEventListener('load', () => {
       return;
     }
 
+    if (isNaN(gross)) {
+      alert("กรุณาระบุจำนวนเงินยอดได้/เสีย!");
+      return;
+    }
+
     if (isNaN(commVal) || commVal < 0) {
       alert("กรุณาระบุค่าคอมมิชชั่นที่ถูกต้อง!");
       return;
@@ -1057,41 +1062,148 @@ window.addEventListener('load', () => {
     }
   });
 
-  // Backup Data Click
-  document.getElementById('btn-backup-data').addEventListener('click', () => {
-    sounds.playClick();
-    const backupStr = JSON.stringify(ledgerState);
-    
-    // Copy to clipboard
-    navigator.clipboard.writeText(backupStr).then(() => {
-      alert("📤 คัดลอกข้อมูลบัญชีมวยลงคลิปบอร์ดแล้ว!\n\nกรุณาเปิดลิงก์เว็บใหม่บน iPhone แล้วกดปุ่ม 'นำเข้าข้อมูล (Import)' จากนั้นทำการกดวางรหัสที่คัดลอกมานี้ได้เลยครับ");
-    }).catch(() => {
-      // Fallback if clipboard API blocked
-      prompt("เครื่องไม่รองรับการคัดลอกอัตโนมัติ กรุณาคัดลอกรหัสสำรองข้อมูลทั้งหมดด้านล่างนี้:", backupStr);
-    });
-  });
+  // --- Modal Helpers & Controls ---
+  const modal = document.getElementById('backup-import-modal');
+  const modalTitle = document.getElementById('modal-title');
+  const modalDesc = document.getElementById('modal-description');
+  const modalTextarea = document.getElementById('modal-textarea');
+  const modalFileInputContainer = document.getElementById('modal-file-input-container');
+  const modalFileInput = document.getElementById('modal-file-input');
+  const modalBtnSecondary = document.getElementById('modal-action-btn-secondary');
+  const modalBtnPrimary = document.getElementById('modal-action-btn-primary');
+  const modalClose = document.getElementById('btn-close-modal');
 
-  // Import Data Click
-  document.getElementById('btn-import-data').addEventListener('click', () => {
-    sounds.playClick();
-    const backupStr = prompt("📥 นำเข้าข้อมูลบัญชีมวย:\n\nกรุณาวางรหัสสำรองข้อมูลที่คุณคัดลอกมาจากระบบเดิมลงในช่องด้านล่าง:");
-    if (backupStr === null) return; // User cancelled
+  function openModal({ title, description, text, showFileInput, primaryBtnText, secondaryBtnText, onPrimaryClick, onSecondaryClick }) {
+    modalTitle.textContent = title;
+    modalDesc.innerHTML = description;
+    modalTextarea.value = text || '';
     
-    const cleanStr = backupStr.trim();
-    if (!cleanStr) {
-      alert("ไม่พบรหัสข้อมูลการนำเข้า!");
+    if (showFileInput) {
+      modalFileInputContainer.style.display = 'block';
+      modalFileInput.value = '';
+    } else {
+      modalFileInputContainer.style.display = 'none';
+    }
+
+    modalBtnPrimary.textContent = primaryBtnText;
+    modalBtnSecondary.textContent = secondaryBtnText;
+
+    // Clone buttons to clear old event listeners
+    const newBtnPrimary = modalBtnPrimary.cloneNode(true);
+    const newBtnSecondary = modalBtnSecondary.cloneNode(true);
+    modalBtnPrimary.parentNode.replaceChild(newBtnPrimary, modalBtnPrimary);
+    modalBtnSecondary.parentNode.replaceChild(newBtnSecondary, modalBtnSecondary);
+
+    newBtnPrimary.addEventListener('click', () => {
+      sounds.playClick();
+      if (onPrimaryClick) onPrimaryClick(modalTextarea.value);
+    });
+
+    newBtnSecondary.addEventListener('click', () => {
+      sounds.playClick();
+      if (onSecondaryClick) onSecondaryClick();
+    });
+
+    modal.style.display = 'flex';
+  }
+
+  function closeModal() {
+    modal.style.display = 'none';
+  }
+
+  if (modalClose) {
+    modalClose.addEventListener('click', () => {
+      sounds.playClick();
+      closeModal();
+    });
+  }
+
+  if (modal) {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        closeModal();
+      }
+    });
+  }
+
+  // Helper to fallback copy text manually
+  function copyTextFallback(text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.top = '0';
+    textarea.style.left = '0';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, 99999);
+    let success = false;
+    try {
+      success = document.execCommand('copy');
+    } catch (e) {
+      success = false;
+    }
+    document.body.removeChild(textarea);
+    return success;
+  }
+
+  // Helper to trigger file download
+  function downloadBackupFile(backupStr) {
+    try {
+      const blob = new Blob([backupStr], {type: 'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `boxing_ledger_backup_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast("ดาวน์โหลดไฟล์สำเร็จ!");
+    } catch (e) {
+      alert("ไม่สามารถสร้างไฟล์ดาวน์โหลดได้ กรุณาใช้วิธีคัดลอกรหัสสำรองแทน");
+    }
+  }
+
+  function showBackupModal(backupStr) {
+    openModal({
+      title: "📤 สำรองข้อมูล (Backup)",
+      description: "ระบบตรวจพบความปลอดภัยจำกัดสิทธิ์คัดลอก (HTTP)<br>กรุณาเลือก <b>ดาวน์โหลดไฟล์</b> เพื่อบันทึกลงเครื่อง หรือคัดลอกรหัสยาวในกล่องด้านล่างนี้:",
+      text: backupStr,
+      showFileInput: false,
+      primaryBtnText: "💾 ดาวน์โหลดไฟล์สำรอง (.json)",
+      secondaryBtnText: "📋 คัดลอกรหัสสำรองข้อมูล",
+      onPrimaryClick: () => {
+        downloadBackupFile(backupStr);
+      },
+      onSecondaryClick: () => {
+        if (copyTextFallback(backupStr)) {
+          alert("📋 คัดลอกรหัสสำรองข้อมูลลงคลิปบอร์ดแล้ว! ท่านสามารถกดปิดหน้านี้และไปที่เว็บใหม่เพื่อนำเข้าได้เลย");
+          closeModal();
+        } else {
+          modalTextarea.select();
+          modalTextarea.setSelectionRange(0, 99999);
+          alert("ไม่สามารถคัดลอกอัตโนมัติได้ กรุณากดแตะค้างในกล่องข้อความแล้วเลือก 'คัดลอกทั้งหมด' ด้วยตนเองครับ");
+        }
+      }
+    });
+  }
+
+  function processImportData(backupStr) {
+    if (!backupStr || !backupStr.trim()) {
+      alert("ไม่พบข้อมูลรหัสสำหรับการนำเข้า!");
       return;
     }
 
     try {
-      const parsed = JSON.parse(cleanStr);
+      const parsed = JSON.parse(backupStr.trim());
       if (parsed && Array.isArray(parsed.channels) && Array.isArray(parsed.transactions)) {
-        if (confirm("⚠️ ยืนยันการนำเข้าข้อมูล? ข้อมูลที่มีอยู่เดิมในเว็บหน้านี้จะถูกแทนที่ด้วยข้อมูลนำเข้าใหม่ทั้งหมด!")) {
+        if (confirm("⚠️ ยืนยันการนำเข้าข้อมูล? ข้อมูลเดิมในระบบจะถูกแทนที่ด้วยข้อมูลนำเข้าใหม่ทั้งหมด!")) {
           sounds.playSaveChime();
           
           ledgerState.channels = parsed.channels;
           ledgerState.transactions = parsed.transactions.map(t => {
-            // Apply backward compatibility parsing if needed
             if (t.commType === undefined) {
               t.commType = 'pct';
               t.commVal = t.commPct !== undefined ? t.commPct : 5;
@@ -1102,7 +1214,7 @@ window.addEventListener('load', () => {
           if (parsed.summaryRange) ledgerState.summaryRange = parsed.summaryRange;
 
           saveToStorage();
-
+          
           // Refresh UI
           renderDashboard();
           renderLedgerTable();
@@ -1110,16 +1222,65 @@ window.addEventListener('load', () => {
           renderPeriodSummaries();
           updateChannelDropdown();
 
-          alert("📥 นำเข้าข้อมูลบัญชีมวยทั้งหมดสำเร็จเรียบร้อยแล้ว!");
+          closeModal();
+          alert("📥 นำเข้าข้อมูลทั้งหมดสำเร็จเรียบร้อยแล้ว!");
         }
       } else {
-        alert("รูปแบบรหัสข้อมูลไม่ถูกต้อง ไม่สามารถนำเข้าได้!");
+        alert("รูปแบบข้อมูลไม่ถูกต้อง กรุณาใช้รหัสหรือไฟล์สำรองข้อมูลที่ถูกต้อง!");
       }
     } catch (e) {
       console.error(e);
-      alert("รหัสข้อมูลไม่ถูกต้องกรุณาตรวจสอบและลองใหม่อีกครั้ง!");
+      alert("เกิดข้อผิดพลาด: รหัสข้อมูลไม่ถูกต้องหรือไฟล์ชำรุด!");
+    }
+  }
+
+  // Backup Data Click
+  document.getElementById('btn-backup-data').addEventListener('click', () => {
+    sounds.playClick();
+    const backupStr = JSON.stringify(ledgerState);
+    
+    // Attempt clipboard API first
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(backupStr).then(() => {
+        alert("📤 คัดลอกรหัสข้อมูลลงคลิปบอร์ดแล้ว!\n\nกรุณาเปิดลิงก์เว็บใหม่บน iPhone แล้วกดปุ่ม 'นำเข้าข้อมูล' จากนั้นทำการกดวางรหัสนี้ได้เลยครับ");
+      }).catch(() => {
+        showBackupModal(backupStr);
+      });
+    } else {
+      showBackupModal(backupStr);
     }
   });
+
+  // Import Data Click
+  document.getElementById('btn-import-data').addEventListener('click', () => {
+    sounds.playClick();
+    
+    openModal({
+      title: "📥 นำเข้าข้อมูล (Import)",
+      description: "เลือกปุ่มด้านล่างเพื่อเลือกไฟล์สำรอง (.json) หรือวางรหัสที่กล่องข้อความ:",
+      text: "",
+      showFileInput: true,
+      primaryBtnText: "⚡ นำเข้าข้อมูล",
+      secondaryBtnText: "ยกเลิก / ปิด",
+      onPrimaryClick: (pastedText) => {
+        const fileInput = document.getElementById('modal-file-input');
+        if (fileInput.files && fileInput.files[0]) {
+          const file = fileInput.files[0];
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            processImportData(e.target.result);
+          };
+          reader.readAsText(file);
+        } else {
+          processImportData(pastedText);
+        }
+      },
+      onSecondaryClick: () => {
+        closeModal();
+      }
+    });
+  });
+
 
   // PWA Service Worker Registration
   if ('serviceWorker' in navigator) {
