@@ -171,7 +171,13 @@ function loadFromStorage() {
     try {
       const parsed = JSON.parse(data);
       ledgerState.channels = parsed.channels || [];
-      ledgerState.transactions = parsed.transactions || [];
+      ledgerState.transactions = (parsed.transactions || []).map(t => {
+        if (t.commType === undefined) {
+          t.commType = 'pct';
+          t.commVal = t.commPct !== undefined ? t.commPct : 5;
+        }
+        return t;
+      });
       
       // Safety check: Ensure we have exactly 13 channels
       if (ledgerState.channels.length < 13) {
@@ -222,7 +228,11 @@ function calculateBetFinancials() {
   let countPending = 0;   // Number of pending entries
 
   ledgerState.transactions.forEach(t => {
-    const commission = t.gross > 0 ? t.gross * (t.commPct / 100) : 0;
+    const commType = t.commType || 'pct';
+    const commVal = t.commVal !== undefined ? t.commVal : (t.commPct || 0);
+    const commission = t.gross > 0 ? 
+      (commType === 'flat' ? Math.min(commVal, t.gross) : t.gross * (commVal / 100)) : 0;
+
     totalNet += t.net;
     totalComm += commission;
 
@@ -394,6 +404,12 @@ function renderLedgerTable() {
     const netText = t.net >= 0 ? `+${t.net.toLocaleString()}` : t.net.toLocaleString();
     const netClass = t.net >= 0 ? 'text-profit' : 'text-loss';
 
+    const commType = t.commType || 'pct';
+    const commVal = t.commVal !== undefined ? t.commVal : (t.commPct || 0);
+
+    const commText = t.gross > 0 ? 
+      (commType === 'flat' ? `฿${commVal.toLocaleString()}` : `${commVal}%`) : '-';
+
     const statusBadge = t.isTransferred ? 
       `<div class="table-checkbox-label transferred" data-id="${t.id}">✔️ โอนแล้ว</div>` :
       `<div class="table-checkbox-label pending" data-id="${t.id}">❌ ยังไม่โอน</div>`;
@@ -404,7 +420,7 @@ function renderLedgerTable() {
       <td style="font-family:var(--font-en); font-size:0.8rem; font-weight:600;">${t.date}</td>
       <td style="font-weight: 500">${channelName}</td>
       <td style="text-align: right;" class="${grossClass}">${grossText}</td>
-      <td style="text-align: right; font-family:var(--font-en); color:var(--primary-light)">${t.gross > 0 ? t.commPct + '%' : '-'}</td>
+      <td style="text-align: right; font-family:var(--font-en); color:var(--primary-light)">${commText}</td>
       <td style="text-align: right;" class="${netClass}">${netText}</td>
       <td style="text-align: center">${statusBadge}</td>
       <td style="text-align: center">
@@ -419,12 +435,15 @@ function renderLedgerTable() {
       const isProfitCard = t.net >= 0;
       cardEl.className = `ledger-mobile-card ${isProfitCard ? 'profit-card' : 'loss-card'}`;
       
-      const commDeductedVal = t.gross > 0 ? Math.round(t.gross * (t.commPct / 100)) : 0;
+      const commDeductedVal = t.gross > 0 ? 
+        (commType === 'flat' ? Math.min(commVal, t.gross) : Math.round(t.gross * (commVal / 100))) : 0;
       const formattedCommDeducted = commDeductedVal > 0 ? `-${commDeductedVal.toLocaleString()}` : '-';
 
       const mobileStatusBadge = t.isTransferred ? 
         `<div class="mobile-status-btn transferred" data-id="${t.id}">🟢 โอนแล้ว</div>` :
         `<div class="mobile-status-btn pending" data-id="${t.id}">🔴 ยังไม่โอน</div>`;
+
+      const commTagText = commType === 'flat' ? `ค่าคอม ฿${commVal.toLocaleString()}` : `ค่าคอมมิชชั่น ${commVal}%`;
 
       cardEl.innerHTML = `
         <div class="ledger-mobile-card-header">
@@ -435,7 +454,7 @@ function renderLedgerTable() {
         <div class="ledger-mobile-card-body">
           <div class="ledger-mobile-card-info">
             <div class="ledger-mobile-card-channel">🥊 ${channelName}</div>
-            <div class="ledger-mobile-card-comm-tag">ค่าคอมมิชชั่น ${t.commPct}%</div>
+            <div class="ledger-mobile-card-comm-tag">${commTagText}</div>
           </div>
           <div class="ledger-mobile-card-net">
             <span class="ledger-mobile-card-net-label">ยอดสุทธิ</span>
@@ -796,7 +815,8 @@ window.addEventListener('load', () => {
     const chId = parseInt(e.target.value);
     const ch = ledgerState.channels.find(c => c.id === chId);
     if (ch) {
-      document.getElementById('bet-comm-pct').value = ch.defaultComm;
+      document.getElementById('bet-comm-type').value = 'pct';
+      document.getElementById('bet-comm-val').value = ch.defaultComm;
     }
   });
   renderDashboard();
@@ -868,7 +888,8 @@ window.addEventListener('load', () => {
     const date = document.getElementById('bet-date').value;
     const channelId = parseInt(document.getElementById('bet-channel').value);
     const gross = parseFloat(document.getElementById('bet-amount').value);
-    const commPct = parseFloat(document.getElementById('bet-comm-pct').value);
+    const commType = document.getElementById('bet-comm-type').value;
+    const commVal = parseFloat(document.getElementById('bet-comm-val').value);
     const isTransferred = document.getElementById('bet-is-transferred').checked;
 
     if (isNaN(channelId)) {
@@ -876,8 +897,20 @@ window.addEventListener('load', () => {
       return;
     }
 
+    if (isNaN(commVal) || commVal < 0) {
+      alert("กรุณาระบุค่าคอมมิชชั่นที่ถูกต้อง!");
+      return;
+    }
+
     // Commission only applies on POSITIVE gross earnings
-    const commission = gross > 0 ? gross * (commPct / 100) : 0;
+    let commission = 0;
+    if (gross > 0) {
+      if (commType === 'flat') {
+        commission = Math.min(commVal, gross);
+      } else {
+        commission = gross * (commVal / 100);
+      }
+    }
     const net = gross - commission;
 
     ledgerState.transactions.push({
@@ -885,7 +918,8 @@ window.addEventListener('load', () => {
       date,
       channelId,
       gross,
-      commPct,
+      commType,
+      commVal,
       net,
       isTransferred
     });
@@ -895,7 +929,7 @@ window.addEventListener('load', () => {
     renderLedgerTable();
     showToast("บันทึกรายการรายรับ-รายจ่ายมวยสำเร็จ!");
 
-    // Reset Form (keep date and commission percent as defaults)
+    // Reset Form (keep date and commission type/val as defaults)
     document.getElementById('bet-amount').value = '';
     document.getElementById('bet-is-transferred').checked = false;
     document.getElementById('status-toggle-text').innerText = '🔴 ยังไม่โอน (Pending Transfer)';
