@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BOXING BETTING LEDGER (สมุดบัญชีเล่นมวย)</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="บัญชีมวย">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
+</head>
+<body>
+
+  <div class="app-wrapper">
+    
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="logo-container">
+        <div class="logo-icon">📊</div>
+        <div class="logo-text">
+          <h1>BOXING LEDGER</h1>
+          <p>บัญชีเงินมวย 13 ช่องทาง</p>
+        </div>
+      </div>
+      
+      <ul class="nav-menu">
+        <li class="nav-menu-item active" data-tab="dashboard">
+          <button class="nav-link-btn"><span class="nav-icon">🏠</span> ภาพรวมบัญชี</button>
+        </li>
+        <li class="nav-menu-item" data-tab="ledger">
+          <button class="nav-link-btn"><span class="nav-icon">📝</span> รายการบัญชีมวย</button>
+        </li>
+        <li class="nav-menu-item" data-tab="channels">
+          <button class="nav-link-btn"><span class="nav-icon">🥊</span> 13 ช่องทางเดินเงิน</button>
+        </li>
+        <li class="nav-menu-item" data-tab="summaries">
+          <button class="nav-link-btn"><span class="nav-icon">📅</span> รายงานสรุปผล</button>
+        </li>
+      </ul>
+      
+      <div class="sidebar-footer">
+        <button class="sound-btn active" id="btn-audio-toggle">
+          <span>🔔 เสียงสังเคราะห์: เปิด</span>
+        </button>
+      </div>
+    </aside>
+    
+    <!-- Main Display Area -->
+    <main class="main-display">
+      
+      <!-- Header Bar -->
+      <header class="header">
+        <div class="header-title">
+          <h2 id="current-page-title">ภาพรวมและวิเคราะห์ข้อมูล</h2>
+          <p>ระบบบันทึกบัญชีกระแสเงินสดมวย แยก 13 สาย หักค่าน้ำคอมมิชชั่นอัตโนมัติ</p>
+        </div>
+        <div class="header-actions">
+          <button class="sound-toggle-mobile" id="btn-audio-toggle-mobile" title="เปิด/ปิดเสียง">🔔</button>
+        </div>
+      </header>
+      
+      <!-- Content Panel Area -->
+      <div class="content-wrapper">
+        
+        <!-- TAB 1: DASHBOARD -->
+        <div class="panel-section active" id="tab-dashboard">
+          
+          <!-- iOS Installation Tip -->
+          <div class="card-panel" id="ios-install-tip" style="background-color: var(--accent-light); border-color: rgba(37, 99, 235, 0.2); display: none;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px;">
+              <div style="display:flex; gap:12px;">
+                <span style="font-size:1.8rem; line-height:1.2;">📱</span>
+                <div>
+                  <h4 style="font-weight:600; color:var(--accent); font-size:0.95rem;">วิธีติดตั้งเป็นแอปในไอโฟนของคุณ (ใช้แบบไม่ต้องต่อเน็ตได้)</h4>
+                  <p style="font-size:0.8rem; color:var(--primary-light); margin-top:4px; line-height: 1.5;">
+                    1. เปิดหน้านี้ด้วย **Safari** ใน iPhone ของคุณ<br>
+                    2. แตะปุ่ม **แชร์ (Share 📤)** ที่แถบด้านล่างหน้าจอ Safari<br>
+                    3. เลือก **"เพิ่มไปยังหน้าจอโฮม (Add to Home Screen ➕)"** และกดเพิ่ม<br>
+                    4. คุณจะได้แอปบัญชีมวยบนหน้าจอโฮมที่กดเปิดใช้งานแบบออฟไลน์เต็มหน้าจอได้ทันที!
+                  </p>
+                </div>
+              </div>
+              <button id="btn-close-install-tip" style="background:none; border:none; cursor:pointer; color:var(--accent); font-size:1.25rem; font-weight:700; padding:0 4px;">×</button>
+            </div>
+          </div>
+
+          <!-- Overview Cards -->
+          <div class="overview-grid">
+            <div class="overview-card balance">
+              <div class="overview-card-header">
+                <span class="overview-card-title">ผลกำไรรวมสุทธิ</span>
+                <span class="overview-card-icon">💰</span>
+              </div>
+              <div class="overview-card-val" id="total-net-balance">฿0</div>
+              <div class="overview-card-desc">ได้เสียสุทธิ (หลังหักเปอร์เซ็นต์กำไร)</div>
+            </div>
+            
+            <div class="overview-card commission">
+              <div class="overview-card-header">
+                <span class="overview-card-title">ค่าคอมมิชชั่นรวม</span>
+                <span class="overview-card-icon">💸</span>
+              </div>
+              <div class="overview-card-val" id="total-comm-deducted">฿0</div>
+              <div class="overview-card-desc">หักเปอร์เซ็นต์สะสมเฉพาะไม้ที่ได้กำไร</div>
+            </div>
+            
+            <div class="overview-card settled">
+              <div class="overview-card-header">
+                <span class="overview-card-title">โอนเคลียร์แล้ว</span>
+                <span class="overview-card-icon">🟢</span>
+              </div>
+              <div class="overview-card-val" id="total-settled-balance">฿0</div>
+              <div class="overview-card-desc">ยอดเงินรวมที่ติ๊กสถานะ "โอนแล้ว"</div>
+            </div>
+            
+            <div class="overview-card pending">
+              <div class="overview-card-header">
+                <span class="overview-card-title">ยอดค้างโอนสะสม</span>
+                <span class="overview-card-icon">⏳</span>
+              </div>
+              <div class="overview-card-val" id="total-pending-balance">฿0</div>
+              <div class="overview-card-desc">ยอดค้างโอนรวมที่รอการโอนชำระ</div>
+            </div>
+          </div>
+          
+          <!-- Quick Entry Form -->
+          <div class="card-panel">
+            <div class="card-panel-title">
+              <span>✍️ บันทึกยอดเล่นรายวัน</span>
+              <span style="font-size:0.75rem; color:var(--muted); font-weight:normal;">*หักคอมมิชชั่นเฉพาะกรณีได้กำไร (ยอดเป็นบวก)</span>
+            </div>
+            <form id="form-add-bet">
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-group-label">วันที่</label>
+                  <input type="date" class="input-control" id="bet-date" required>
+                </div>
+                <div class="form-group">
+                  <label class="form-group-label">ช่องทางการเงิน</label>
+                  <select class="input-control" id="bet-channel" required>
+                    <option value="" disabled selected>-- เลือกช่องทาง --</option>
+                    <!-- Generated 13 Options via JS -->
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-group-label">ยอดได้/เสีย (บาท)</label>
+                  <input type="number" class="input-control" id="bet-amount" placeholder="เช่น 5000 หรือ -3000" required>
+                </div>
+                <div class="form-group">
+                  <label class="form-group-label">หักเปอร์เซ็นต์กรณีได้</label>
+                  <select class="input-control" id="bet-comm-pct" required>
+                    <option value="0">0% (ไม่หัก)</option>
+                    <option value="1">1%</option>
+                    <option value="2">2%</option>
+                    <option value="3">3%</option>
+                    <option value="5" selected>5%</option>
+                    <option value="7">7%</option>
+                    <option value="10">10%</option>
+                    <option value="15">15%</option>
+                    <option value="20">20%</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div class="form-row" style="margin-top: 16px; grid-template-columns: 1.5fr 1fr; align-items: center;">
+                <div class="status-toggle-wrap" id="bet-status-toggle">
+                  <input type="checkbox" class="status-checkbox" id="bet-is-transferred">
+                  <span class="status-label-text" id="status-toggle-text">🔴 ยังไม่โอน (Pending Transfer)</span>
+                </div>
+                <button type="submit" class="btn-submit">💾 บันทึกยอดบัญชีมวย</button>
+              </div>
+            </form>
+          </div>
+          
+          <!-- Recent Cashflow Chart -->
+          <div class="card-panel">
+            <div class="card-panel-title">📊 ยอดได้สุทธิแยกตามวันชกชกล่าสุด (Daily Trends)</div>
+            <div class="bars-container" id="dashboard-bars-chart">
+              <!-- Render columns by JS -->
+            </div>
+          </div>
+        </div>
+        
+        <!-- TAB 2: LEDGER TABLE -->
+        <div class="panel-section" id="tab-ledger">
+          <div class="card-panel">
+            <div class="card-panel-title">📝 บัญชีการเงินมวยรายวัน (Boxing Betting Ledger)</div>
+            
+            <div class="filter-bar">
+              <div class="filter-group" style="display:flex; gap:10px;">
+                <select class="input-control" id="filter-ledger-channel" style="width:180px;">
+                  <option value="all">กรอง: ทุกช่องทาง</option>
+                  <!-- 13 channels options -->
+                </select>
+                <select class="input-control" id="filter-ledger-status" style="width:160px;">
+                  <option value="all">กรอง: ทุกสถานะโอน</option>
+                  <option value="transferred">โอนแล้ว</option>
+                  <option value="pending">ยังไม่โอน</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <input type="date" class="input-control" id="filter-ledger-date" style="width:160px;">
+              </div>
+            </div>
+            
+            <div class="table-responsive">
+              <table class="clean-table">
+                <thead>
+                  <tr>
+                    <th>วันที่</th>
+                    <th>ช่องทางการเงิน</th>
+                    <th style="text-align: right">ยอดได้เสียดิบ (Gross)</th>
+                    <th style="text-align: right">ค่าหักคอม (%)</th>
+                    <th style="text-align: right">ยอดได้เสียสุทธิ (Net)</th>
+                    <th style="text-align: center">สถานะการโอน (คลิกเปลี่ยนได้)</th>
+                    <th style="text-align: center">การจัดการ</th>
+                  </tr>
+                </thead>
+                <tbody id="ledger-table-rows">
+                  <!-- JS builds rows -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Mobile View Cards Container -->
+            <div class="mobile-ledger-cards" id="ledger-mobile-cards">
+              <!-- JS builds cards -->
+            </div>
+          </div>
+        </div>
+        
+        <!-- TAB 3: 13 CHANNELS -->
+        <div class="panel-section" id="tab-channels">
+          <div class="card-panel">
+            <div class="card-panel-title">
+              <span>🥊 ข้อมูลสรุปรายช่องทางมวย (13 Financial Channels)</span>
+              <div style="display:flex; gap:8px;">
+                <button class="btn-submit" id="btn-reset-channels-names" style="padding: 4px 10px; font-size:0.75rem; background-color: #f1f5f9; color: var(--primary-light); border: 1px solid var(--border-color);">✏️ รีเซ็ตชื่อเริ่มต้น</button>
+                <button class="btn-submit" id="btn-clear-all-data" style="padding: 4px 10px; font-size:0.75rem; background-color: var(--loss-color); color: #fff; box-shadow: none;">🗑️ ล้างข้อมูลทั้งหมด</button>
+              </div>
+            </div>
+            
+            <div class="channels-grid" id="channels-cards-container">
+              <!-- Render 13 cards dynamically -->
+            </div>
+          </div>
+        </div>
+        
+        <!-- TAB 4: SUMMARIES -->
+        <div class="panel-section" id="tab-summaries">
+          <!-- Filter Time Ranges -->
+          <div class="tab-sub-header">
+            <div class="summary-filter-group">
+              <button class="summary-filter-btn active" data-range="daily">สรุปรายวัน</button>
+              <button class="summary-filter-btn" data-range="weekly">สรุปรายอาทิตย์</button>
+              <button class="summary-filter-btn" data-range="monthly">สรุปรายเดือน</button>
+            </div>
+            <div style="font-size:0.8rem; color:var(--muted)">รายงานสรุปตามยอดได้เสียสุทธิ</div>
+          </div>
+          
+          <!-- Summary Cards Grid -->
+          <div class="summary-cards-grid" id="summary-cards-container">
+            <!-- Dynamic summary periods -->
+          </div>
+        </div>
+        
+      </div>
+      
+    </main>
+    
+  </div>
+
+  <!-- Small Toast Message Banner -->
+  <div class="toast-msg" id="toast-banner">
+    <span>📊</span>
+    <span id="toast-banner-text">บันทึกยอดสำเร็จ</span>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
