@@ -219,6 +219,17 @@ function showToast(message) {
 }
 
 // --- 4. Main Calculations & Aggregators ---
+
+// Single source of truth for computing commission on one transaction.
+// Handles current records (commType: 'flat'|'pct' + commVal) and falls back
+// gracefully for any legacy records that only ever had commPct.
+function getTxCommission(t) {
+  if (!(t.gross > 0)) return 0;
+  const commType = t.commType || 'pct';
+  const commVal = t.commVal !== undefined ? t.commVal : (t.commPct || 0);
+  return commType === 'flat' ? Math.min(commVal, t.gross) : t.gross * (commVal / 100);
+}
+
 function calculateBetFinancials() {
   let totalNet = 0;       // Net Win/Loss (after commission on profits)
   let totalComm = 0;      // Total commission deducted
@@ -228,13 +239,8 @@ function calculateBetFinancials() {
   let countPending = 0;   // Number of pending entries
 
   ledgerState.transactions.forEach(t => {
-    const commType = t.commType || 'pct';
-    const commVal = t.commVal !== undefined ? t.commVal : (t.commPct || 0);
-    const commission = t.gross > 0 ? 
-      (commType === 'flat' ? Math.min(commVal, t.gross) : t.gross * (commVal / 100)) : 0;
-
     totalNet += t.net;
-    totalComm += commission;
+    totalComm += getTxCommission(t);
 
     if (t.isTransferred) {
       totalSettled += t.net;
@@ -703,7 +709,7 @@ function renderPeriodSummaries() {
 
     groups[key].entriesCount++;
     groups[key].net += t.net;
-    groups[key].comm += t.gross > 0 ? t.gross * (t.commPct / 100) : 0;
+    groups[key].comm += getTxCommission(t);
     
     if (t.gross > 0) groups[key].grossProfit += t.gross;
     else groups[key].grossLoss += t.gross;
@@ -737,34 +743,51 @@ function renderPeriodSummaries() {
     const netClass = g.net >= 0 ? 'text-profit' : 'text-loss';
     const netText = g.net >= 0 ? `+${g.net.toLocaleString()}` : g.net.toLocaleString();
 
+    // Flow composition: how the gross activity splits into ได้ / เสีย / ค่าคอม
+    const lossAbs = Math.abs(g.grossLoss);
+    const flowTotal = g.grossProfit + lossAbs + g.comm;
+    const pctProfit = flowTotal > 0 ? (g.grossProfit / flowTotal) * 100 : 0;
+    const pctLoss = flowTotal > 0 ? (lossAbs / flowTotal) * 100 : 0;
+    const pctComm = flowTotal > 0 ? (g.comm / flowTotal) * 100 : 0;
+
+    // Settlement progress: how much of the net has already been transferred
+    const settledAbs = Math.abs(g.settled);
+    const pendingAbs = Math.abs(g.pending);
+    const settleTotal = settledAbs + pendingAbs;
+    const pctSettled = settleTotal > 0 ? (settledAbs / settleTotal) * 100 : 0;
+
     card.innerHTML = `
       <div class="summary-period-header">
         <span>${g.label}</span>
         <span style="font-size:0.7rem; font-weight:normal; color:var(--muted)">(${g.entriesCount} รายการ)</span>
       </div>
-      <div class="channel-stats-row">
-        <span>ยอดได้รวม (บวก):</span>
-        <span class="text-profit">+${g.grossProfit.toLocaleString()}</span>
+
+      <div class="summary-net-headline">
+        <span class="summary-net-label">ยอดได้เสียสุทธิ</span>
+        <span class="summary-net-value ${netClass}">${netText}<span class="summary-net-unit">THB</span></span>
       </div>
-      <div class="channel-stats-row">
-        <span>ยอดเสียรวม (ลบ):</span>
-        <span class="text-loss">${g.grossLoss.toLocaleString()}</span>
+
+      <div class="summary-flow-block">
+        <div class="summary-flow-bar">
+          <div class="summary-flow-seg profit" style="width:${pctProfit}%"></div>
+          <div class="summary-flow-seg loss" style="width:${pctLoss}%"></div>
+          <div class="summary-flow-seg comm" style="width:${pctComm}%"></div>
+        </div>
+        <div class="summary-flow-legend">
+          <span class="legend-item"><i class="dot profit"></i>ได้ ${g.grossProfit.toLocaleString()}</span>
+          <span class="legend-item"><i class="dot loss"></i>เสีย ${lossAbs.toLocaleString()}</span>
+          <span class="legend-item"><i class="dot comm"></i>ค่าคอม ${g.comm.toLocaleString()}</span>
+        </div>
       </div>
-      <div class="channel-stats-row">
-        <span>หักคอมมิชชั่นสะสม:</span>
-        <span style="color:var(--loss-color)">-${g.comm.toLocaleString()}</span>
-      </div>
-      <div class="channel-stats-row">
-        <span>โอนจ่ายเคลียร์แล้ว:</span>
-        <span style="color:var(--transferred-color)">${g.settled.toLocaleString()}</span>
-      </div>
-      <div class="channel-stats-row">
-        <span>ยังค้างโอนสะสม:</span>
-        <span style="color:${g.pending > 0 ? 'var(--pending-color)' : g.pending < 0 ? 'var(--loss-color)' : 'var(--muted)'}">${g.pending.toLocaleString()}</span>
-      </div>
-      <div class="channel-stats-row" style="border-top:1px solid var(--border-color); margin-top:10px; padding-top:10px; font-weight:700;">
-        <span>ยอดได้เสียสุทธิ:</span>
-        <span class="${netClass}">${netText} THB</span>
+
+      <div class="summary-settle-block">
+        <div class="summary-settle-labels">
+          <span style="color:var(--transferred-color)">โอนแล้ว ${settledAbs.toLocaleString()}</span>
+          <span style="color:var(--pending-color)">ค้างโอน ${pendingAbs.toLocaleString()}</span>
+        </div>
+        <div class="summary-settle-track">
+          <div class="summary-settle-fill" style="width:${pctSettled}%"></div>
+        </div>
       </div>
     `;
     fragment.appendChild(card);
