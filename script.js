@@ -261,22 +261,37 @@ function calculateBetFinancials() {
   };
 }
 
-// Helper to get calendar week range string (e.g. "สัปดาห์: 12 มิ.ย. - 18 มิ.ย. 2570")
-function getWeekRangeString(dateStr) {
-  const d = new Date(dateStr);
-  const day = d.getDay();
-  // Adjust Monday start index
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  const monday = new Date(d.setDate(diff));
-  const sunday = new Date(d.setDate(diff + 6));
-  
-  return `${monday.toLocaleDateString('th-TH', {day:'numeric', month:'short'})} - ${sunday.toLocaleDateString('th-TH', {day:'numeric', month:'short', year:'numeric'})}`;
+// Zero-pad helper for building ISO-style sort keys
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+// Returns { key, label } for the Mon-Sun calendar week containing dateStr.
+// `key` is a stable "YYYY-MM-DD" (the Monday, in the underlying Gregorian
+// calendar) so weeks always sort correctly even across month/year boundaries.
+// `label` is the Thai-formatted display range.
+function getWeekInfo(dateStr) {
+  const base = new Date(dateStr);
+  const day = base.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+
+  const monday = new Date(base);
+  monday.setDate(base.getDate() + mondayOffset);
+
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+
+  const key = `${monday.getFullYear()}-${pad2(monday.getMonth() + 1)}-${pad2(monday.getDate())}`;
+  const label = `${monday.toLocaleDateString('th-TH', {day:'numeric', month:'short'})} - ${sunday.toLocaleDateString('th-TH', {day:'numeric', month:'short', year:'numeric'})}`;
+
+  return { key, label };
 }
 
-// Helper to get month string (e.g. "มิถุนายน 2570")
-function getMonthString(dateStr) {
+// Returns { key, label } for the calendar month containing dateStr.
+// `key` is "YYYY-MM" (Gregorian) for correct chronological sorting.
+function getMonthInfo(dateStr) {
   const d = new Date(dateStr);
-  return d.toLocaleDateString('th-TH', {month: 'long', year: 'numeric'});
+  const key = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
+  const label = d.toLocaleDateString('th-TH', {month: 'long', year: 'numeric'});
+  return { key, label };
 }
 
 // --- 5. DOM Renderers ---
@@ -687,11 +702,13 @@ function renderPeriodSummaries() {
       const dObj = new Date(t.date);
       label = dObj.toLocaleDateString('th-TH', {day: 'numeric', month: 'long', year: 'numeric'});
     } else if (range === 'weekly') {
-      key = getWeekRangeString(t.date);
-      label = key;
+      const info = getWeekInfo(t.date);
+      key = info.key;
+      label = info.label;
     } else { // monthly
-      key = getMonthString(t.date);
-      label = key;
+      const info = getMonthInfo(t.date);
+      key = info.key;
+      label = info.label;
     }
 
     if (!groups[key]) {
@@ -721,12 +738,10 @@ function renderPeriodSummaries() {
     }
   });
 
-  // Sort groups by date/week range descending
-  const sortedKeys = Object.keys(groups).sort((a,b) => {
-    // If range is daily or monthly, we can parse or estimate dates
-    if (range === 'daily') return new Date(b) - new Date(a);
-    return b.localeCompare(a); // Alphabetic sorting as fallback
-  });
+  // All keys (daily "YYYY-MM-DD", weekly "YYYY-MM-DD" of Monday, monthly "YYYY-MM")
+  // are zero-padded ISO-style strings, so a plain string sort is chronologically
+  // correct — newest period first.
+  const sortedKeys = Object.keys(groups).sort((a, b) => b.localeCompare(a));
 
   if (sortedKeys.length === 0) {
     container.innerHTML = `<p style="grid-column: span 3; text-align:center; color:var(--muted); padding:40px;">ไม่มีข้อมูลบัญชีมวยในการสรุปผล</p>`;
