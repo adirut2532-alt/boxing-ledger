@@ -69,10 +69,21 @@ test('daily, weekly and monthly cards always put latest periods first', () => {
     assert.deepEqual(values,['444','333','222','111'],range);
   }
 });
-test('win rate excludes zero entries and handles empty and all-loss periods', () => {
-  assert.equal(context.periodWinStats([{gross:100},{gross:-50},{gross:0}]).rate,50);
+test('win rate combines net outcomes by day, excluding zero and absent days', () => {
+  const tx = (date, net) => ({date, net});
+  const stats = context.periodWinStats([
+    tx('2026-09-01',100), tx('2026-09-01',-150),
+    tx('2026-09-02',200), tx('2026-09-02',-50),
+    tx('2026-09-03',100), tx('2026-09-03',-100),
+    tx('2026-09-04',50)
+  ]);
+  assert.equal(stats.wins,2);
+  assert.equal(stats.losses,1);
+  assert.equal(stats.neutral,1);
+  assert.equal(stats.rate,2/3*100);
   assert.equal(context.periodWinStats([]).rate,null);
-  assert.equal(context.periodWinStats([{gross:0}]).rate,null);
-  assert.equal(context.periodWinStats([{gross:-10}]).rate,0);
-  assert.equal(context.periodWinStats([{gross:10}]).rate,100);
+  assert.equal(context.periodWinStats([tx('2026-09-01',0)]).rate,null);
+  assert.equal(context.periodWinStats([tx('2026-09-01',-10)]).rate,0);
+  assert.equal(context.periodWinStats([tx('2026-09-01',10)]).rate,100);
+  assert.equal(context.periodWinStats([tx('2026-09-01',0.1),tx('2026-09-01',0.2),tx('2026-09-01',-0.3)]).neutral,1);
 });
