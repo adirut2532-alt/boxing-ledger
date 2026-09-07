@@ -722,6 +722,14 @@ function updateChannelDropdown() {
   if (savedFilterVal) filterSelect.value = savedFilterVal;
 }
 
+// Win rate measures recorded outcomes, not individual bouts within an entry.
+function periodWinStats(transactions) {
+  const wins = transactions.filter(t => t.gross > 0).length;
+  const losses = transactions.filter(t => t.gross < 0).length;
+  const neutral = transactions.length - wins - losses;
+  return { wins, losses, neutral, rate: wins + losses ? wins / (wins + losses) * 100 : null };
+}
+
 // F. Render Periodic summaries (Daily, Weekly, Monthly)
 function renderPeriodSummaries() {
   const container = document.getElementById('summary-cards-container');
@@ -757,10 +765,12 @@ function renderPeriodSummaries() {
         net: 0,
         pending: 0,
         settled: 0,
-        entriesCount: 0
+        entriesCount: 0,
+        outcomes: []
       };
     }
 
+    groups[key].outcomes.push(t);
     groups[key].entriesCount++;
     groups[key].net += t.net;
     groups[key].comm += getTxCommission(t);
@@ -808,6 +818,20 @@ function renderPeriodSummaries() {
     const settleTotal = settledAbs + pendingAbs;
     const pctSettled = settleTotal > 0 ? (settledAbs / settleTotal) * 100 : 0;
 
+    const win = periodWinStats(g.outcomes);
+    const rateLabel = win.rate === null ? '—' : `${win.rate.toLocaleString('th-TH', {maximumFractionDigits: 1})}%`;
+    const infographic = range === 'weekly' || range === 'monthly' ? `
+      <section class="period-infographic" aria-label="สถิติผลรายการ">
+        <div class="win-ring" style="--win-angle:${(win.rate || 0) * 3.6}deg;--ring-rest:${win.rate === null ? '#e2e8f0' : '#dc2626'}" role="img" aria-label="วินเรต ${rateLabel}">
+          <div><strong>${rateLabel}</strong><span>วินเรต</span></div>
+        </div>
+        <div class="win-details">
+          <strong>ผลรายการ${range === 'weekly' ? 'รายอาทิตย์' : 'รายเดือน'}</strong>
+          <div class="win-counts"><span>🟢 ได้ <b>${win.wins}</b></span><span>🔴 เสีย <b>${win.losses}</b></span><span>⚪ ยอดศูนย์ <b>${win.neutral}</b></span></div>
+          <p>${win.rate === null ? 'ยังไม่มีรายการได้หรือเสีย' : 'อัตราชนะ = รายการได้ ÷ (รายการได้ + รายการเสีย)'}</p>
+          <small>นับจากยอดก่อนหักคอม ไม่รวมยอดศูนย์ • หน่วย: รายการ ไม่ใช่จำนวนคู่มวย</small>
+        </div>
+      </section>` : '';
     card.innerHTML = `
       <div class="summary-period-header">
         <span>${g.label}</span>
@@ -819,6 +843,7 @@ function renderPeriodSummaries() {
         <span class="summary-net-value ${netClass}">${netText}<span class="summary-net-unit">THB</span></span>
       </div>
 
+      ${infographic}
       <div class="summary-flow-block">
         <div class="summary-flow-bar">
           <div class="summary-flow-seg profit" style="width:${pctProfit}%"></div>
