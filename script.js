@@ -722,11 +722,17 @@ function updateChannelDropdown() {
   if (savedFilterVal) filterSelect.value = savedFilterVal;
 }
 
-// Win rate measures recorded outcomes, not individual bouts within an entry.
+// Combine all channels per calendar day before counting positive/negative days.
 function periodWinStats(transactions) {
-  const wins = transactions.filter(t => t.gross > 0).length;
-  const losses = transactions.filter(t => t.gross < 0).length;
-  const neutral = transactions.length - wins - losses;
+  const days = new Map();
+  for (const tx of transactions) {
+    days.set(tx.date, (days.get(tx.date) || 0) + tx.net);
+  }
+  // Classify at satang precision to avoid floating-point zero artifacts.
+  const totals = [...days.values()].map(total => Math.round(total * 100));
+  const wins = totals.filter(total => total > 0).length;
+  const losses = totals.filter(total => total < 0).length;
+  const neutral = totals.length - wins - losses;
   return { wins, losses, neutral, rate: wins + losses ? wins / (wins + losses) * 100 : null };
 }
 
@@ -821,15 +827,15 @@ function renderPeriodSummaries() {
     const win = periodWinStats(g.outcomes);
     const rateLabel = win.rate === null ? '—' : `${win.rate.toLocaleString('th-TH', {maximumFractionDigits: 1})}%`;
     const infographic = range === 'weekly' || range === 'monthly' ? `
-      <section class="period-infographic" aria-label="สถิติผลรายการ">
+      <section class="period-infographic" aria-label="สถิติผลรายวัน">
         <div class="win-ring" style="--win-angle:${(win.rate || 0) * 3.6}deg;--ring-rest:${win.rate === null ? '#e2e8f0' : '#dc2626'}" role="img" aria-label="วินเรต ${rateLabel}">
           <div><strong>${rateLabel}</strong><span>วินเรต</span></div>
         </div>
         <div class="win-details">
-          <strong>ผลรายการ${range === 'weekly' ? 'รายอาทิตย์' : 'รายเดือน'}</strong>
-          <div class="win-counts"><span>🟢 ได้ <b>${win.wins}</b></span><span>🔴 เสีย <b>${win.losses}</b></span><span>⚪ ยอดศูนย์ <b>${win.neutral}</b></span></div>
-          <p>${win.rate === null ? 'ยังไม่มีรายการได้หรือเสีย' : 'อัตราชนะ = รายการได้ ÷ (รายการได้ + รายการเสีย)'}</p>
-          <small>นับจากยอดก่อนหักคอม ไม่รวมยอดศูนย์ • หน่วย: รายการ ไม่ใช่จำนวนคู่มวย</small>
+          <strong>ผลรายวันใน${range === 'weekly' ? 'รายอาทิตย์' : 'รายเดือน'}</strong>
+          <div class="win-counts"><span>🟢 วันบวก <b>${win.wins}</b></span><span>🔴 วันลบ <b>${win.losses}</b></span><span>⚪ วันยอดศูนย์ <b>${win.neutral}</b></span></div>
+          <p>${win.rate === null ? 'ยังไม่มีวันที่ยอดบวกหรือลบ' : 'วินเรต = วันบวก ÷ (วันบวก + วันลบ) × 100'}</p>
+          <small>รวมยอดสุทธิหลังหักคอมทุกช่องทางต่อวัน • ไม่นับวันยอดศูนย์และวันที่ไม่มีรายการ</small>
         </div>
       </section>` : '';
     card.innerHTML = `
