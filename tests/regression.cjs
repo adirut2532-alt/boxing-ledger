@@ -69,3 +69,10 @@ test('daily, weekly and monthly cards always put latest periods first', () => {
     assert.deepEqual(values,['444','333','222','111'],range);
   }
 });
+test('win rate excludes zero entries and handles empty and all-loss periods', () => {
+  assert.equal(context.periodWinStats([{gross:100},{gross:-50},{gross:0}]).rate,50);
+  assert.equal(context.periodWinStats([]).rate,null);
+  assert.equal(context.periodWinStats([{gross:0}]).rate,null);
+  assert.equal(context.periodWinStats([{gross:-10}]).rate,0);
+  assert.equal(context.periodWinStats([{gross:10}]).rate,100);
+});
