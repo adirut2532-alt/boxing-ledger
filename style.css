@@ -1385,3 +1385,17 @@ body {
   from { transform: translateY(16px); }
   to { transform: translateY(0); }
 }
+
+
+/* Weekly and monthly outcome infographic */
+.period-infographic { display:flex; align-items:center; gap:18px; padding:20px 0; margin:14px 0; border-top:1px solid var(--border-color); border-bottom:1px solid var(--border-color); }
+.win-ring { flex:0 0 112px; height:112px; border-radius:50%; display:grid; place-items:center; background:conic-gradient(#15803d var(--win-angle), var(--ring-rest) 0); }
+.win-ring > div { width:88px; height:88px; background:#fff; border-radius:50%; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.win-ring strong { font-size:1.35rem; color:#0f172a; }
+.win-ring span { font-size:.75rem; color:#64748b; }
+.win-details { min-width:0; flex:1; }
+.win-details > strong { font-size:.9rem; }
+.win-counts { display:flex; flex-wrap:wrap; gap:8px 14px; margin:10px 0; font-size:.8rem; }
+.win-details p { font-size:.75rem; margin:6px 0; color:#475569; }
+.win-details small { display:block; font-size:.7rem; color:#64748b; line-height:1.6; }
+@media (max-width:400px) { .period-infographic { flex-direction:column; align-items:flex-start; } .win-ring { flex-basis:auto; width:112px; align-self:center; } }
