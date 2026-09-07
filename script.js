@@ -131,7 +131,7 @@ function seedInitialBettingData() {
   const getPastDateStr = (daysAgo) => {
     const d = new Date();
     d.setDate(today.getDate() - daysAgo);
-    return d.toISOString().split('T')[0];
+    return localDateString(d);
   };
 
   ledgerState.transactions = [
@@ -264,6 +264,10 @@ function calculateBetFinancials() {
 // Zero-pad helper for building ISO-style sort keys
 function pad2(n) { return String(n).padStart(2, '0'); }
 
+function localDateString(date = new Date()) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
 // Returns { key, label } for the Mon-Sun calendar week containing dateStr.
 // `key` is a stable "YYYY-MM-DD" (the Monday, in the underlying Gregorian
 // calendar) so weeks always sort correctly even across month/year boundaries.
@@ -292,6 +296,39 @@ function getMonthInfo(dateStr) {
   const key = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
   const label = d.toLocaleDateString('th-TH', {month: 'long', year: 'numeric'});
   return { key, label };
+}
+
+// Validate a backup completely before replacing any saved records.
+function validateBackup(data) {
+  if (!data || !Array.isArray(data.channels) || !Array.isArray(data.transactions)) {
+    throw new Error('Invalid backup structure');
+  }
+  const ids = new Set();
+  for (const channel of data.channels) {
+    if (!channel || !Number.isInteger(channel.id) || channel.id < 1 ||
+        typeof channel.name !== 'string' || ids.has(channel.id)) {
+      throw new Error('Invalid channel');
+    }
+    ids.add(channel.id);
+  }
+  if (ids.size !== 13 || [...ids].some(id => id > 13)) throw new Error('Expected 13 channels');
+  const txIds = new Set();
+  for (const tx of data.transactions) {
+    if (!tx || typeof tx.id !== 'string' || !tx.id || txIds.has(tx.id) ||
+        !ids.has(tx.channelId) || !Number.isFinite(tx.gross) ||
+        !Number.isFinite(tx.net) || typeof tx.isTransferred !== 'boolean' ||
+        typeof tx.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(tx.date)) {
+      throw new Error('Invalid transaction');
+    }
+    const date = new Date(tx.date + 'T12:00:00');
+    if (Number.isNaN(date.getTime()) || localDateString(date) !== tx.date) throw new Error('Invalid date');
+    const type = tx.commType ?? 'pct';
+    const value = tx.commVal ?? tx.commPct ?? 5;
+    if (!['pct', 'flat'].includes(type) || !Number.isFinite(value) || value < 0 ||
+        (type === 'pct' && value > 100)) throw new Error('Invalid commission');
+    txIds.add(tx.id);
+  }
+  return data;
 }
 
 // --- 5. DOM Renderers ---
@@ -843,7 +880,7 @@ window.addEventListener('load', () => {
   loadFromStorage();
   
   // Set default Date to today
-  document.getElementById('bet-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('bet-date').value = localDateString();
 
   // Render initial panels
   updateChannelDropdown();
@@ -935,12 +972,12 @@ window.addEventListener('load', () => {
       return;
     }
 
-    if (isNaN(gross)) {
+    if (!Number.isFinite(gross)) {
       alert("กรุณาระบุจำนวนเงินยอดได้/เสีย!");
       return;
     }
 
-    if (isNaN(commVal) || commVal < 0) {
+    if (!Number.isFinite(commVal) || commVal < 0 || (commType === 'pct' && commVal > 100)) {
       alert("กรุณาระบุค่าคอมมิชชั่นที่ถูกต้อง!");
       return;
     }
@@ -1107,8 +1144,8 @@ window.addEventListener('load', () => {
   const modalTextarea = document.getElementById('modal-textarea');
   const modalFileInputContainer = document.getElementById('modal-file-input-container');
   const modalFileInput = document.getElementById('modal-file-input');
-  const modalBtnSecondary = document.getElementById('modal-action-btn-secondary');
-  const modalBtnPrimary = document.getElementById('modal-action-btn-primary');
+  let modalBtnSecondary = document.getElementById('modal-action-btn-secondary');
+  let modalBtnPrimary = document.getElementById('modal-action-btn-primary');
   const modalClose = document.getElementById('btn-close-modal');
 
   function openModal({ title, description, text, showFileInput, primaryBtnText, secondaryBtnText, onPrimaryClick, onSecondaryClick }) {
@@ -1131,6 +1168,8 @@ window.addEventListener('load', () => {
     const newBtnSecondary = modalBtnSecondary.cloneNode(true);
     modalBtnPrimary.parentNode.replaceChild(newBtnPrimary, modalBtnPrimary);
     modalBtnSecondary.parentNode.replaceChild(newBtnSecondary, modalBtnSecondary);
+    modalBtnPrimary = newBtnPrimary;
+    modalBtnSecondary = newBtnSecondary;
 
     newBtnPrimary.addEventListener('click', () => {
       sounds.playClick();
@@ -1193,7 +1232,7 @@ window.addEventListener('load', () => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `boxing_ledger_backup_${new Date().toISOString().split('T')[0]}.json`;
+      a.download = `boxing_ledger_backup_${localDateString()}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -1235,7 +1274,7 @@ window.addEventListener('load', () => {
     }
 
     try {
-      const parsed = JSON.parse(backupStr.trim());
+      const parsed = validateBackup(JSON.parse(backupStr.trim()));
       if (parsed && Array.isArray(parsed.channels) && Array.isArray(parsed.transactions)) {
         if (confirm("⚠️ ยืนยันการนำเข้าข้อมูล? ข้อมูลเดิมในระบบจะถูกแทนที่ด้วยข้อมูลนำเข้าใหม่ทั้งหมด!")) {
           sounds.playSaveChime();
