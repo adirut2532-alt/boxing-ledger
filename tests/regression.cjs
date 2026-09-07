@@ -48,3 +48,24 @@ test('service worker prefers network and falls back offline without deleting unr
     assert.equal(await (await result).text(),expected); await Promise.all(waits); offline=true;
   }
 });
+test('daily, weekly and monthly cards always put latest periods first', () => {
+  const container = { innerHTML: '', appendChild(fragment) { this.cards = fragment.children; } };
+  context.document = {
+    getElementById: () => container,
+    createDocumentFragment: () => ({ children: [], appendChild(card) { this.children.push(card); } }),
+    createElement: () => ({})
+  };
+  // Intentionally unordered, including the month and year boundaries.
+  vm.runInContext(`ledgerState.transactions = [
+    {date:'2026-06-08',gross:111,net:111,isTransferred:true},
+    {date:'2027-01-05',gross:444,net:444,isTransferred:true},
+    {date:'2026-08-31',gross:333,net:333,isTransferred:true},
+    {date:'2026-07-06',gross:222,net:222,isTransferred:true}
+  ]`, context);
+  for (const range of ['daily','weekly','monthly']) {
+    vm.runInContext(`ledgerState.summaryRange = '${range}'; renderPeriodSummaries()`, context);
+    assert.equal(container.cards.length,4);
+    const values = container.cards.map(card => card.innerHTML.match(/\+(444|333|222|111)/)[1]);
+    assert.deepEqual(values,['444','333','222','111'],range);
+  }
+});
