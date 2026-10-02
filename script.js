@@ -268,6 +268,52 @@ function localDateString(date = new Date()) {
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 }
 
+// --- Overdue transfer alerts (ค้างโอนเกิน 48 ชม.) ---
+const PENDING_ALERT_HOURS = 48;          // change this number to adjust the alert threshold
+const NOTIFY_COOLDOWN_MS = 12 * 3600000; // re-notify at most every 12h unless a new overdue item appears
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, ch => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]
+  ));
+}
+
+// An entry only stores a date (no time), so its "pending clock" starts at 00:00 local time of that date.
+function pendingSinceMs(t) {
+  const [y, m, d] = String(t.date).split('-').map(Number);
+  return new Date(y, m - 1, d).getTime();
+}
+
+// Not-yet-transferred entries that have waited >= PENDING_ALERT_HOURS, oldest first.
+function getOverduePending(now = Date.now()) {
+  const limitMs = PENDING_ALERT_HOURS * 3600000;
+  return ledgerState.transactions
+    .filter(t => !t.isTransferred && now - pendingSinceMs(t) >= limitMs)
+    .map(t => {
+      const ch = ledgerState.channels.find(c => c.id === t.channelId);
+      return {
+        tx: t,
+        channelName: ch ? ch.name : `ช่องทาง ${t.channelId}`,
+        ageHours: Math.floor((now - pendingSinceMs(t)) / 3600000)
+      };
+    })
+    .sort((a, b) => b.ageHours - a.ageHours);
+}
+
+function formatAge(hours) {
+  return hours >= 48 ? `${Math.floor(hours / 24)} วัน` : `${hours} ชม.`;
+}
+
+function signedBaht(value) {
+  return (value > 0 ? '+' : '') + formatBaht(value);
+}
+
+function summarizeOverdue(overdue) {
+  let won = 0, lost = 0;
+  overdue.forEach(o => { if (o.tx.net >= 0) won += o.tx.net; else lost += o.tx.net; });
+  return { won, lost };
+}
+
 // Returns { key, label } for the Mon-Sun calendar week containing dateStr.
 // `key` is a stable "YYYY-MM-DD" (the Monday, in the underlying Gregorian
 // calendar) so weeks always sort correctly even across month/year boundaries.
@@ -361,6 +407,140 @@ function renderDashboard() {
 
   // Render recent 8 active days column bars
   renderDailyChart();
+
+  // Refresh overdue-transfer alerts (header badge, dashboard banner, panel, app icon badge)
+  renderOverdueAlerts();
+}
+
+// --- Overdue alert UI ---
+function renderOverdueAlerts() {
+  const overdue = getOverduePending();
+  const count = overdue.length;
+
+  const badge = document.getElementById('alert-badge');
+  const btn = document.getElementById('btn-alerts');
+  if (badge) {
+    badge.textContent = count > 99 ? '99+' : String(count);
+    badge.style.display = count > 0 ? 'flex' : 'none';
+  }
+  if (btn) btn.classList.toggle('has-alerts', count > 0);
+
+  const banner = document.getElementById('overdue-banner');
+  if (banner) {
+    if (count > 0) {
+      const { won, lost } = summarizeOverdue(overdue);
+      const parts = [];
+      if (won > 0) parts.push(`ได้ ${formatBaht(won)}`);
+      if (lost < 0) parts.push(`เสีย ${formatBaht(Math.abs(lost))}`);
+      banner.innerHTML = `
+        <span class="overdue-banner-icon">⏰</span>
+        <div class="overdue-banner-text">
+          <strong>ค้างโอนเกิน ${PENDING_ALERT_HOURS} ชม. ${count} รายการ</strong>
+          <span>${parts.join(' · ')} · เก่าสุดค้าง ${formatAge(overdue[0].ageHours)}</span>
+        </div>
+        <span class="overdue-banner-cta">ดูรายการ ›</span>`;
+      banner.style.display = 'flex';
+    } else {
+      banner.style.display = 'none';
+    }
+  }
+
+  renderAlertPanel(overdue);
+
+  // Home-screen icon badge (iOS 16.4+ installed PWA / desktop Chrome)
+  try {
+    if (typeof navigator !== 'undefined' && 'setAppBadge' in navigator) {
+      if (count > 0) navigator.setAppBadge(count).catch(() => {});
+      else navigator.clearAppBadge().catch(() => {});
+    }
+  } catch (e) { /* badge is a nice-to-have */ }
+
+  return overdue;
+}
+
+function renderAlertPanel(overdue) {
+  const list = document.getElementById('alert-panel-list');
+  if (!list) return;
+
+  if (overdue.length === 0) {
+    list.innerHTML = `<div class="alert-empty">✅ ไม่มียอดค้างโอนเกิน ${PENDING_ALERT_HOURS} ชม.<br>เคลียร์ครบแล้ว</div>`;
+  } else {
+    list.innerHTML = overdue.map(({ tx, channelName, ageHours }) => {
+      const [y, m, d] = String(tx.date).split('-').map(Number);
+      const dateLabel = new Date(y, m - 1, d).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+      const amtClass = tx.net >= 0 ? 'text-profit' : 'text-loss';
+      return `
+        <div class="alert-row">
+          <div class="alert-row-main">
+            <div class="alert-row-title">${escapeHtml(channelName)}</div>
+            <div class="alert-row-meta">${dateLabel} · ค้าง ${formatAge(ageHours)}</div>
+          </div>
+          <div class="alert-row-amt ${amtClass}">${signedBaht(tx.net)}</div>
+          <button class="alert-row-done" data-id="${escapeHtml(tx.id)}">โอนแล้ว</button>
+        </div>`;
+    }).join('');
+  }
+
+  const status = document.getElementById('alert-notify-status');
+  const enableBtn = document.getElementById('btn-enable-notify');
+  if (!status || !enableBtn) return;
+
+  enableBtn.style.display = 'none';
+  if (typeof Notification === 'undefined' || !('serviceWorker' in navigator)) {
+    status.textContent = 'เบราว์เซอร์นี้ไม่รองรับแจ้งเตือนระบบ (บน iPhone ต้องเพิ่มแอปไปหน้าจอโฮมก่อน)';
+  } else if (Notification.permission === 'granted') {
+    status.textContent = '🔔 แจ้งเตือนระบบเปิดอยู่ — จะเตือนเมื่อเปิดแอป และระหว่างที่แอปเปิดอยู่';
+  } else if (Notification.permission === 'denied') {
+    status.textContent = '🔕 แจ้งเตือนถูกบล็อก — ไปที่ ตั้งค่า › การแจ้งเตือน › บัญชีมวย เพื่อเปิด';
+  } else {
+    status.textContent = 'เปิดแจ้งเตือนระบบเพื่อให้เด้งเตือนบนหน้าจอ';
+    enableBtn.style.display = 'inline-flex';
+  }
+}
+
+function openAlertPanel() {
+  const overlay = document.getElementById('alert-panel-overlay');
+  if (!overlay) return;
+  renderAlertPanel(getOverduePending());
+  overlay.style.display = 'flex';
+}
+
+function closeAlertPanel() {
+  const overlay = document.getElementById('alert-panel-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+// System notification (lock-screen / notification centre). Only fires while the app is open
+// or being opened — there is no server in this app to push while it is closed.
+async function checkOverdueNotifications() {
+  const overdue = getOverduePending();
+  if (overdue.length === 0) return;
+  if (typeof Notification === 'undefined' || !('serviceWorker' in navigator)) return;
+  if (Notification.permission !== 'granted') return;
+
+  let seen = [], last = 0;
+  try {
+    seen = JSON.parse(localStorage.getItem('OVERDUE_NOTIFIED_IDS') || '[]');
+    last = Number(localStorage.getItem('OVERDUE_NOTIFIED_AT') || 0);
+  } catch (e) { /* ignore corrupt values */ }
+
+  const hasNew = overdue.some(o => !seen.includes(o.tx.id));
+  if (!hasNew && Date.now() - last < NOTIFY_COOLDOWN_MS) return;
+
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    await reg.showNotification(`⏰ ค้างโอนเกิน ${PENDING_ALERT_HOURS} ชม.`, {
+      body: `${overdue.length} รายการ · เก่าสุดค้าง ${formatAge(overdue[0].ageHours)} · แตะเพื่อเปิดดู`,
+      tag: 'overdue-pending',
+      renotify: true,
+      icon: 'assets/icon-192.png',
+      badge: 'assets/icon-192.png'
+    });
+    localStorage.setItem('OVERDUE_NOTIFIED_IDS', JSON.stringify(overdue.map(o => o.tx.id)));
+    localStorage.setItem('OVERDUE_NOTIFIED_AT', String(Date.now()));
+  } catch (e) {
+    console.log('Overdue notification failed', e);
+  }
 }
 
 // B. Render simple dynamic columns chart
@@ -929,6 +1109,56 @@ window.addEventListener('load', () => {
   renderLedgerTable();
   renderChannels();
   renderPeriodSummaries();
+
+  // --- Overdue alert wiring ---
+  const alertBtn = document.getElementById('btn-alerts');
+  const alertBanner = document.getElementById('overdue-banner');
+  const alertOverlay = document.getElementById('alert-panel-overlay');
+  const alertCloseBtn = document.getElementById('btn-alert-close');
+  const alertList = document.getElementById('alert-panel-list');
+  const enableNotifyBtn = document.getElementById('btn-enable-notify');
+
+  if (alertBtn) alertBtn.addEventListener('click', () => { sounds.playClick(); openAlertPanel(); });
+  if (alertBanner) alertBanner.addEventListener('click', () => { sounds.playClick(); openAlertPanel(); });
+  if (alertCloseBtn) alertCloseBtn.addEventListener('click', closeAlertPanel);
+  if (alertOverlay) alertOverlay.addEventListener('click', (e) => { if (e.target === alertOverlay) closeAlertPanel(); });
+
+  // Mark an overdue entry as transferred straight from the alert panel
+  if (alertList) alertList.addEventListener('click', (e) => {
+    const doneBtn = e.target.closest('.alert-row-done');
+    if (!doneBtn) return;
+    sounds.playClick();
+    const tx = ledgerState.transactions.find(t => t.id === doneBtn.dataset.id);
+    if (!tx) return;
+    tx.isTransferred = true;
+    saveToStorage();
+    renderLedgerTable();
+    renderDashboard();
+    renderPeriodSummaries();
+    showToast("อัปเดตสถานะ: โอนแล้ว!");
+  });
+
+  // Notification permission must be requested from a tap (required by iOS)
+  if (enableNotifyBtn) enableNotifyBtn.addEventListener('click', async () => {
+    try { await Notification.requestPermission(); } catch (e) { /* ignore */ }
+    renderOverdueAlerts();
+    checkOverdueNotifications();
+  });
+
+  // Re-check when the app returns to the foreground and every 5 minutes while open
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') { renderOverdueAlerts(); checkOverdueNotifications(); }
+  });
+  setInterval(() => { renderOverdueAlerts(); checkOverdueNotifications(); }, 5 * 60 * 1000);
+  checkOverdueNotifications();
+
+  // Opened by tapping a system notification
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (e.data && e.data.type === 'open-alerts') openAlertPanel();
+    });
+  }
+  if (location.search.includes('alerts=1')) openAlertPanel();
 
   // Tab switching links click
   document.querySelectorAll('.nav-menu-item').forEach(item => {

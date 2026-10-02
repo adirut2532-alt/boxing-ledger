@@ -87,3 +87,28 @@ test('win rate combines net outcomes by day, excluding zero and absent days', ()
   assert.equal(context.periodWinStats([tx('2026-09-01',10)]).rate,100);
   assert.equal(context.periodWinStats([tx('2026-09-01',0.1),tx('2026-09-01',0.2),tx('2026-09-01',-0.3)]).neutral,1);
 });
+test('overdue alert flags only untransferred entries pending 48h or more, oldest first', () => {
+  process.env.TZ = 'Asia/Bangkok';
+  const now = new Date(2026, 9, 3, 0, 0).getTime(); // 3 Oct 2026 00:00 local
+  vm.runInContext(`ledgerState.channels = [{id:1,name:'ช่อง A'}];
+    ledgerState.transactions = [
+      {id:'exactly48',date:'2026-10-01',channelId:1,gross:1000,net:950,isTransferred:false},
+      {id:'only24',date:'2026-10-02',channelId:1,gross:500,net:500,isTransferred:false},
+      {id:'settled',date:'2026-09-20',channelId:1,gross:700,net:700,isTransferred:true},
+      {id:'oldest',date:'2026-09-25',channelId:1,gross:-300,net:-300,isTransferred:false},
+      {id:'unknownChannel',date:'2026-09-30',channelId:99,gross:100,net:100,isTransferred:false}
+    ]`, context);
+  const result = context.getOverduePending(now);
+  assert.deepEqual(Array.from(result, r => r.tx.id), ['oldest', 'unknownChannel', 'exactly48']);
+  assert.equal(result[0].channelName, 'ช่อง A');
+  assert.equal(result[1].channelName, 'ช่องทาง 99');
+  assert.equal(result[2].ageHours, 48);
+  const { won, lost } = context.summarizeOverdue(result);
+  assert.equal(won, 1050);
+  assert.equal(lost, -300);
+});
+test('alert helpers format age and escape channel names', () => {
+  assert.equal(context.formatAge(50), '2 วัน');
+  assert.equal(context.formatAge(30), '30 ชม.');
+  assert.equal(context.escapeHtml('<b onclick="x">&\''), '&lt;b onclick=&quot;x&quot;&gt;&amp;&#39;');
+});

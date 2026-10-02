@@ -57,6 +57,9 @@
           <p>ระบบบันทึกบัญชีกระแสเงินสดมวย แยก 13 สาย หักค่าน้ำคอมมิชชั่นอัตโนมัติ</p>
         </div>
         <div class="header-actions">
+          <button class="alert-btn" id="btn-alerts" title="แจ้งเตือนยอดค้างโอนเกิน 48 ชม." aria-label="แจ้งเตือนยอดค้างโอน">
+            ⏰<span class="alert-badge" id="alert-badge" style="display:none">0</span>
+          </button>
           <button class="sound-toggle-mobile" id="btn-audio-toggle-mobile" title="เปิด/ปิดเสียง">🔔</button>
         </div>
       </header>
@@ -85,6 +88,9 @@
               <button id="btn-close-install-tip" style="background:none; border:none; cursor:pointer; color:var(--accent); font-size:1.25rem; font-weight:700; padding:0 4px;">×</button>
             </div>
           </div>
+
+          <!-- Overdue transfer banner (shown only when something is pending > 48h) -->
+          <div class="overdue-banner" id="overdue-banner" style="display:none" role="button" tabindex="0"></div>
 
           <!-- Overview Cards -->
           <div class="overview-grid">
@@ -277,6 +283,21 @@
   </div>
 
   <!-- Small Toast Message Banner -->
+  <!-- Overdue transfer alert panel -->
+  <div class="alert-panel-overlay" id="alert-panel-overlay" style="display:none">
+    <div class="alert-panel" role="dialog" aria-modal="true" aria-label="ยอดค้างโอนเกิน 48 ชม.">
+      <div class="alert-panel-head">
+        <h3>⏰ ค้างโอนเกิน 48 ชม.</h3>
+        <button class="alert-panel-close" id="btn-alert-close" aria-label="ปิด">×</button>
+      </div>
+      <div class="alert-panel-list" id="alert-panel-list"></div>
+      <div class="alert-panel-foot">
+        <span id="alert-notify-status"></span>
+        <button class="alert-enable-btn" id="btn-enable-notify" style="display:none">เปิดแจ้งเตือน</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast-msg" id="toast-banner">
     <span>📊</span>
     <span id="toast-banner-text">บันทึกยอดสำเร็จ</span>

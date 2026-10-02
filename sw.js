@@ -46,3 +46,19 @@ self.addEventListener('fetch', (event) => {
     return Response.error();
   }));
 });
+
+// Tapping an overdue-transfer notification focuses the app (or opens it) and shows the alert list.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windows => {
+      for (const client of windows) {
+        if ('focus' in client) {
+          client.postMessage({ type: 'open-alerts' });
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(new URL('index.html?alerts=1', self.registration.scope).href);
+    })
+  );
+});
